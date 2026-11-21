@@ -22,7 +22,21 @@ const off = p => Math.round((1 - p.price / p.mrp) * 100);
 const Mark = ({ s = 28 }) => (<svg width={s} height={s} viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#10B981" /><path d="M8 9h16l-12 14h12" stroke="#0B1329" strokeWidth="3" fill="none" strokeLinejoin="round" /></svg>);
 function Logo({ dark, h = 28 }) {
   const [bad, setBad] = useState(false);
-  return (<span className="flex items-center gap-2">{bad ? <Mark s={h} /> : <img src="/zevik-logo.png" alt="Zevik" style={{ height: h }} className={dark ? "invert brightness-110" : ""} onError={() => setBad(true)} />}{bad && <b className="tracking-widest">ZEVIK</b>}</span>);
+  return (
+    <span className="flex items-center gap-2">
+      {bad ? (
+        <Mark s={h} />
+      ) : (
+        <img
+          src="/zevik-logo.png"
+          alt="Zevik"
+          onError={() => setBad(true)}
+          style={{ height: h, width: h }}
+          className={`object-contain rounded-md ${dark ? "invert brightness-110" : ""}`}
+        />
+      )}
+    </span>
+  );
 }
 const Art = ({ p }) => (<svg viewBox="0 0 200 200" className="h-full w-full p-8"><rect width="200" height="200" fill="none" /><circle cx="100" cy="100" r="70" fill="#10B98122" stroke="#00D9FF" strokeWidth="2" /><path d="M60 130h80M75 130l25-50 25 50M100 80V60" stroke="#10B981" strokeWidth="6" strokeLinecap="round" fill="none" /><text x="100" y="170" textAnchor="middle" fontSize="12" fill="currentColor">{p.name.split(" ").slice(-2).join(" ")}</text></svg>);
 const Img = ({ p, i = 0 }) => p.images[i] ? <img src={p.images[i]} alt={p.name} className="h-full w-full object-cover" /> : <Art p={p} />;
