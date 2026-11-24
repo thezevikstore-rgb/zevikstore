@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
-import { ShoppingBag, Sun, Moon, Star, MapPin, X, Plus, Minus, Trash2, Package, ShieldCheck, Truck, Zap } from "lucide-react";
+import { ShoppingBag, Sun, Moon, Star, MapPin, X, Plus, Minus, Trash2, Package, ShieldCheck, Truck, Zap, Copy, Check, ExternalLink } from "lucide-react";
 import { supabase, uploadProductImage } from "./supabase";
 
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xgaklgbj";
 const OWNER = "thezevikstore@gmail.com", PIN = "2026", IG = "the_zevikstore";
+const UPI_ID = "abijithmohanan2006-2@oksbi"; // Swap to your full @kotakbank ID anytime to route directly to Kotak 811
+const UPI_NAME = "Zevik Store";
+
 const ls = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const mk = (id, name, price, mrp, category, badge, stock, tagline, highlights, specs) => ({ id, name, price, mrp, category, badge, stock, tagline, highlights, specs, images: [] });
@@ -99,10 +102,17 @@ export default function App() {
         }
         const { data: ordData } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
         if (ordData) {
-          const mappedOrders = ordData.map(r => ({
-            id: r.id, date: r.created_at, items: r.items || [], total: r.total, status: r.status,
-            buyer: { name: r.customer_name, mobile: r.phone, insta: r.instagram || "", address: r.address.split(" | ")[0] || r.address, city: r.address.split(" | ")[1] || "", pincode: r.pincode, pay: r.payment_method }
-          }));
+          const mappedOrders = ordData.map(r => {
+            const parts = (r.payment_method || "").split(" | UTR: ");
+            return {
+              id: r.id, date: r.created_at, items: r.items || [], total: r.total, status: r.status,
+              buyer: {
+                name: r.customer_name, mobile: r.phone, insta: r.instagram || "",
+                address: r.address.split(" | ")[0] || r.address, city: r.address.split(" | ")[1] || "",
+                pincode: r.pincode, pay: parts[0] || "UPI", utr: parts[1] || ""
+              }
+            };
+          });
           setOrders(mappedOrders);
           sv("zevik_orders", mappedOrders);
         }
@@ -164,10 +174,11 @@ export default function App() {
       setProducts(nextProducts);
       sv("zevik_products", nextProducts);
       setBag([]);
+      const payLabel = o.buyer.pay === "UPI" && o.buyer.utr ? `UPI | UTR: ${o.buyer.utr}` : o.buyer.pay;
       await supabase.from("orders").insert({
         id: o.id, customer_name: o.buyer.name, phone: o.buyer.mobile,
         instagram: o.buyer.insta || "", address: `${o.buyer.address} | ${o.buyer.city}`,
-        pincode: o.buyer.pincode, payment_method: o.buyer.pay,
+        pincode: o.buyer.pincode, payment_method: payLabel,
         items: o.items, total: o.total, status: o.status
       });
       for (const it of o.items) {
@@ -234,30 +245,44 @@ function PDP({ p, products, go, addBag, buy }) {
 }
 
 function Checkout({ items, products, close, done }) {
-  const [f, setF] = useState(() => ({ name: "", mobile: "", insta: "", address: "", city: "", pincode: "", pay: "UPI", ...ls("zevik_buyer_profile", {}) }));
-  const [err, setErr] = useState({}); const [order, setOrder] = useState(null); const [busy, setBusy] = useState(false);
+  const [f, setF] = useState(() => ({ name: "", mobile: "", insta: "", address: "", city: "", pincode: "", pay: "UPI", ...ls("zevik_buyer_profile", {}), utr: "" }));
+  const [err, setErr] = useState({}); const [order, setOrder] = useState(null); const [busy, setBusy] = useState(false); const [copied, setCopied] = useState(false);
   const lines = items.map(i => ({ ...i, p: products.find(p => p.id === i.id) })).filter(l => l.p);
   const sub = lines.reduce((a, l) => a + l.p.price * l.qty, 0); const disc = f.pay === "UPI" ? 20 : 0; const total = sub - disc;
   const set = (k, v) => setF({ ...f, [k]: v });
+
+  const upiUri = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_NAME)}&am=${total}&cu=INR&tn=${encodeURIComponent("Zevik Order")}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiUri)}`;
+
   const gps = () => navigator.geolocation?.getCurrentPosition(async pos => {
     try { const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`); const a = (await r.json()).address || {};
       setF(s => ({ ...s, address: s.address || [a.road, a.suburb].filter(Boolean).join(", "), city: [a.city || a.town || a.village || a.state_district, a.state].filter(Boolean).join(", "), pincode: (a.postcode || "").replace(/\D/g, "").slice(0, 6) }));
     } catch { alert("Couldn't fetch address. Please type it in."); } }, () => alert("Location permission denied."));
+
   const submit = async () => {
     const e = {};
-    if (!f.name.trim()) e.name = 1; if (!/^[6-9]\d{9}$/.test(f.mobile)) e.mobile = 1; if (!f.address.trim()) e.address = 1; if (!f.city.trim()) e.city = 1; if (!/^\d{6}$/.test(f.pincode)) e.pincode = 1;
+    if (!f.name.trim()) e.name = 1;
+    if (!/^[6-9]\d{9}$/.test(f.mobile)) e.mobile = 1;
+    if (!f.address.trim()) e.address = 1;
+    if (!f.city.trim()) e.city = 1;
+    if (!/^\d{6}$/.test(f.pincode)) e.pincode = 1;
+    if (f.pay === "UPI" && !/^\d{12}$/.test(f.utr.trim())) e.utr = 1;
     setErr(e); if (Object.keys(e).length || busy) return;
     setBusy(true);
-    sv("zevik_buyer_profile", f);
+    const { utr, ...profile } = f;
+    sv("zevik_buyer_profile", profile);
     const o = { id: "ZVK-" + Math.random().toString(36).slice(2, 8).toUpperCase(), date: new Date().toISOString(), items: lines.map(l => ({ id: l.id, name: l.p.name, qty: l.qty, price: l.p.price })), total, buyer: f, status: STATUS[0] };
     await done(o); setOrder(o); setBusy(false);
     if (!FORMSPREE_ENDPOINT.includes("YOUR_FORMSPREE")) fetch(FORMSPREE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(o) }).catch(() => {});
   };
-  const receipt = o => `ZEVIK ORDER ${o.id}\n${o.items.map(i => `${i.qty}x ${i.name} - ${inr(i.price * i.qty)}`).join("\n")}\nTotal: ${inr(o.total)} (${o.buyer.pay === "UPI" ? "Prepaid UPI" : "COD"})\nName: ${o.buyer.name}\nMobile: ${o.buyer.mobile}\nAddress: ${o.buyer.address}, ${o.buyer.city} - ${o.buyer.pincode}`;
+
+  const receipt = o => `ZEVIK ORDER ${o.id}\n${o.items.map(i => `${i.qty}x ${i.name} - ${inr(i.price * i.qty)}`).join("\n")}\nTotal: ${inr(o.total)} (${o.buyer.pay === "UPI" ? `Prepaid UPI • UTR: ${o.buyer.utr}` : "COD"})\nName: ${o.buyer.name}\nMobile: ${o.buyer.mobile}\nAddress: ${o.buyer.address}, ${o.buyer.city} - ${o.buyer.pincode}`;
   const cls = k => `inp ${err[k] ? "!border-red-500" : ""}`;
+
   if (order) return (<Drawer title="Order Placed 🎉" close={close}><p className="mb-1">Your Order ID</p><div className="mb-4 text-3xl font-extrabold text-emerald">{order.id}</div>
     <p className="mb-4 text-sm opacity-70">Send your receipt on Instagram for instant tracking updates.</p>
     <button className="btn w-full" onClick={() => { navigator.clipboard?.writeText(receipt(order)); window.open(`https://ig.me/m/${IG}`, "_blank"); }}>Copy Receipt & Open @{IG} DM</button></Drawer>);
+
   return (<Drawer title="Checkout" close={close}><div className="space-y-3">
     {lines.map(l => <div key={l.id} className="flex justify-between text-sm"><span>{l.qty}× {l.p.name}</span><b>{inr(l.p.price * l.qty)}</b></div>)}
     <input className={cls("name")} placeholder="Full Name *" value={f.name} onChange={e => set("name", e.target.value)} />
@@ -266,10 +291,45 @@ function Checkout({ items, products, close, done }) {
     <textarea className={cls("address")} rows={2} placeholder="Street / Hostel / Flat Address + Landmark *" value={f.address} onChange={e => set("address", e.target.value)} />
     <input className={cls("city")} placeholder="City, State *" value={f.city} onChange={e => set("city", e.target.value)} />
     <div className="flex gap-2"><input className={cls("pincode")} inputMode="numeric" maxLength={6} placeholder="Pincode *" value={f.pincode} onChange={e => set("pincode", e.target.value.replace(/\D/g, ""))} /><button className="btn2 flex items-center gap-1 whitespace-nowrap" onClick={gps}><MapPin size={14} />Use Current Location</button></div>
-    {[["UPI", "Prepaid UPI — Priority Dispatch (Save ₹20)"], ["COD", "Cash on Delivery (COD)"]].map(([v, t]) => <label key={v} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm ${f.pay === v ? "border-emerald" : "border-line"}`}><input type="radio" checked={f.pay === v} onChange={() => set("pay", v)} />{t}</label>)}
+
+    {[["UPI", "Prepaid UPI — Priority Dispatch (Save ₹20)"], ["COD", "Cash on Delivery (COD)"]].map(([v, t]) => (
+      <label key={v} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm ${f.pay === v ? "border-emerald" : "border-line"}`}>
+        <input type="radio" checked={f.pay === v} onChange={() => set("pay", v)} />{t}
+      </label>
+    ))}
+
+    {f.pay === "UPI" && (
+      <div className="space-y-3 rounded-xl border border-emerald/40 bg-bg p-4 text-center">
+        <div className="text-xs font-semibold text-cyan">Scan & Pay {inr(total)} via GPay / PhonePe / Paytm</div>
+        <div className="mx-auto w-fit rounded-xl bg-white p-2.5 shadow">
+          <img src={qrUrl} alt="Zevik UPI QR" className="h-44 w-44" />
+        </div>
+        <div className="flex items-center justify-center gap-2 text-xs">
+          <code className="rounded bg-card px-2 py-1 font-mono text-emerald">{UPI_ID}</code>
+          <button type="button" className="btn2 !px-2 !py-1 text-xs" onClick={() => { navigator.clipboard?.writeText(UPI_ID); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+            {copied ? <Check size={13} className="text-emerald" /> : <Copy size={13} />}
+          </button>
+        </div>
+        <a href={upiUri} className="btn2 inline-flex items-center gap-1.5 text-xs">
+          <ExternalLink size={13} /> Open UPI App ({inr(total)})
+        </a>
+        <div className="text-left">
+          <input
+            className={cls("utr")}
+            inputMode="numeric"
+            maxLength={12}
+            placeholder="Enter 12-digit UPI UTR / Ref No. *"
+            value={f.utr}
+            onChange={e => set("utr", e.target.value.replace(/\D/g, ""))}
+          />
+          <p className="mt-1 text-[11px] opacity-60">Find the 12-digit UTR number in your UPI payment receipt.</p>
+        </div>
+      </div>
+    )}
+
     {disc > 0 && <div className="flex justify-between text-sm text-emerald"><span>UPI discount</span><span>−₹20</span></div>}
     <div className="flex justify-between text-lg font-bold"><span>Total</span><span>{inr(total)}</span></div>
-    {Object.keys(err).length > 0 && <p className="text-sm text-red-400">Please fix the highlighted fields.</p>}
+    {Object.keys(err).length > 0 && <p className="text-sm text-red-400">{err.utr ? "Please enter the valid 12-digit UPI UTR number after paying." : "Please fix the highlighted fields."}</p>}
     <button disabled={busy} className="btn w-full !py-3" onClick={submit}><Zap className="mr-1 inline" size={14} />{busy ? "Placing Order..." : "Place Order"}</button></div></Drawer>);
 }
 
@@ -377,7 +437,7 @@ function Seller({ seller, setSeller, products, setProducts, orders, setOrders })
         <button className="btn2" onClick={() => { if (url[p.id]) { upd(p.id, x => ({ ...x, images: [...(x.images || []), url[p.id]] })); setUrl({ ...url, [p.id]: "" }); } }}>Add URL</button></div></div>)}</div>
       <button className="btn2 mt-4" onClick={resetCatalog}>Reset Default Catalog</button></section>
     <section><h3 className="mb-3 font-bold">Orders ({orders.length})</h3>{!orders.length && <p className="opacity-60">No orders yet.</p>}{orders.map(o => <div key={o.id} className="mb-2 rounded-xl border border-line bg-card p-3 text-sm">
-      <div className="flex flex-wrap justify-between gap-2"><b>{o.id} • {inr(o.total)} • {o.buyer.pay}</b>
+      <div className="flex flex-wrap justify-between gap-2"><b>{o.id} • {inr(o.total)} • {o.buyer.pay}{o.buyer.utr && ` (UTR: ${o.buyer.utr})`}</b>
         <select className="inp !w-auto" value={o.status} onChange={e => updateOrderStatus(o.id, e.target.value)}>{STATUS.map(s => <option key={s}>{s}</option>)}</select></div>
       <div className="opacity-70">{o.items.map(i => `${i.qty}× ${i.name}`).join(", ")}</div>
       <div className="opacity-70">{o.buyer.name} • {o.buyer.mobile}{o.buyer.insta && ` • ${o.buyer.insta}`} • {o.buyer.address}, {o.buyer.city} - {o.buyer.pincode}</div></div>)}</section></div>);
