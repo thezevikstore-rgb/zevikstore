@@ -209,7 +209,7 @@ function PDP({ p, products, go, addBag, buy }) {
   const bundle = products.filter(x => x.id !== p.id).slice(0, 2);
   const reviews = [["Aarav S.", "Perfect for my hostel desk. Build is solid for the price!"], ["Priya M.", "Delivered in 4 days. Exactly as shown."], ["Rohit K.", "Great value, using it daily for WFH."]];
   return (<div>
-    <div className="mb-4 text-xs opacity-70"><button onClick={() => go({ n: "home" })}>Home</button> > {p.category} > <b>{p.name}</b></div>
+    <div className="mb-4 text-xs opacity-70"><button onClick={() => go({ n: "home" })}>Home</button>{" > "}{p.category}{" > "}<b>{p.name}</b></div>
     <div className="grid gap-6 lg:grid-cols-2">
       <div><div className="flex flex-col-reverse gap-3 sm:flex-row-reverse">
         <div className="aspect-square flex-1 overflow-hidden rounded-xl border border-line bg-card"><Img p={p} i={i} /></div>
