@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://tiqknkqfhkywjsezssyp.supabase.co";
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_NsWnQKIGwZt5Q3ASAcow6Q_r0PakGQ6";
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function uploadProductImage(file) {
   const ext = file.name.split(".").pop();
