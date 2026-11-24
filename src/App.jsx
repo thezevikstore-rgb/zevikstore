@@ -9,7 +9,7 @@ const UPI_NAME = "Zevik Store";
 
 const ls = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-const mk = (id, name, price, mrp, category, badge, stock, tagline, highlights, specs) => ({ id, name, price, mrp, category, badge, stock, tagline, highlights, specs, images: [] });
+const mk = (id, name, price, mrp, category, badge, stock, tagline, highlights, specs) => ({ id, name, price, mrp, category, badge, stock, tagline, highlights, specs, images: [], supplierUrl: "" });
 
 const DEFAULTS = [
   mk("laptop-stand", "Foldable Aluminum Laptop Stand", 349, 699, "Desk Setup", "Bestseller", 6, "Ergonomic height, folds flat.", ["Fits 10–17 inch laptops", "6 adjustable angles", "Anti-slip silicone pads", "Foldable, 480g"], [["Material", "Aluminum alloy"], ["Weight", "480 g"], ["Load", "Up to 10 kg"]]),
@@ -28,16 +28,16 @@ const off = p => Math.round((1 - p.price / p.mrp) * 100);
 const toRow = p => ({
   id: p.id, name: p.name, price: Number(p.price), mrp: Number(p.mrp),
   category: p.category, badge: p.badge || "", tagline: p.tagline || "",
-  specs: { highlights: p.highlights || [], specs: p.specs || [] },
+  specs: { highlights: p.highlights || [], specs: p.specs || [], supplierUrl: p.supplierUrl || "" },
   stock: Number(p.stock), images: p.images || []
 });
 
 const fromRow = r => {
-  const sp = Array.isArray(r.specs) ? { highlights: [], specs: r.specs } : (r.specs || {});
+  const sp = Array.isArray(r.specs) ? { highlights: [], specs: r.specs, supplierUrl: "" } : (r.specs || {});
   return {
     id: r.id, name: r.name, price: r.price, mrp: r.mrp,
     category: r.category, badge: r.badge || "", tagline: r.tagline || "",
-    highlights: sp.highlights || [], specs: sp.specs || [],
+    highlights: sp.highlights || [], specs: sp.specs || [], supplierUrl: sp.supplierUrl || "",
     stock: r.stock ?? 0, images: r.images || []
   };
 };
@@ -353,8 +353,8 @@ function Track({ orders, close }) {
 
 function Seller({ seller, setSeller, products, setProducts, orders, setOrders }) {
   const [em, setEm] = useState(""); const [pn, setPn] = useState(""); const [bad, setBad] = useState(false); const [uploading, setUploading] = useState(false);
-  const blank = { name: "", price: "", mrp: "", category: "Desk Setup", badge: "", tagline: "", highlights: "", specs: "", stock: 10, images: [] };
-  const [nf, setNf] = useState(blank); const [url, setUrl] = useState({});
+  const blank = { name: "", price: "", mrp: "", category: "Desk Setup", badge: "", tagline: "", highlights: "", specs: "", stock: 10, supplierUrl: "", images: [] };
+  const [nf, setNf] = useState(blank); const [url, setUrl] = useState({}); const [sup, setSup] = useState({}); const [copiedId, setCopiedId] = useState(null);
 
   if (!seller) return (<div className="mx-auto max-w-sm space-y-3 rounded-xl border border-line bg-card p-6"><h2 className="text-xl font-bold">Seller Login</h2>
     <input className="inp" type="email" placeholder="Seller email" value={em} onChange={e => setEm(e.target.value)} /><input className="inp" type="password" placeholder="Store PIN" value={pn} onChange={e => setPn(e.target.value)} />
@@ -418,10 +418,18 @@ function Seller({ seller, setSeller, products, setProducts, orders, setOrders })
     await supabase.from("orders").update({ status }).eq("id", id);
   };
 
+  const copyBuyerAddress = o => {
+    const txt = `Name: ${o.buyer.name}\nPhone: ${o.buyer.mobile}\nAddress: ${o.buyer.address}\nCity: ${o.buyer.city}\nPincode: ${o.buyer.pincode}`;
+    navigator.clipboard?.writeText(txt);
+    setCopiedId(o.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   return (<div className="space-y-8"><div className="flex items-center justify-between"><h2 className="text-2xl font-bold">Seller Portal {uploading && <span className="text-sm font-normal text-cyan">(Uploading image...)</span>}</h2><button className="btn2" onClick={() => setSeller(false)}>Logout</button></div>
     <section><h3 className="mb-3 font-bold">Add New Product</h3><div className="grid gap-2 rounded-xl border border-line bg-card p-4 sm:grid-cols-2">
       {[["name", "Name"], ["price", "Price (₹)"], ["mrp", "MRP (₹)"], ["badge", "Badge"], ["tagline", "Tagline"], ["stock", "Stock Count"]].map(([k, l]) => <input key={k} className="inp" placeholder={l} value={nf[k]} onChange={e => setNf({ ...nf, [k]: e.target.value })} />)}
       <select className="inp" value={nf.category} onChange={e => setNf({ ...nf, category: e.target.value })}>{CATS.slice(1).map(c => <option key={c}>{c}</option>)}</select>
+      <input className="inp" placeholder="Meesho / Supplier Product URL (optional)" value={nf.supplierUrl} onChange={e => setNf({ ...nf, supplierUrl: e.target.value })} />
       <textarea className="inp" rows={3} placeholder="Highlights (one per line)" value={nf.highlights} onChange={e => setNf({ ...nf, highlights: e.target.value })} />
       <textarea className="inp" rows={3} placeholder="Specs (Key: Value per line)" value={nf.specs} onChange={e => setNf({ ...nf, specs: e.target.value })} />
       <input type="file" accept="image/*" multiple disabled={uploading} className="text-xs" onChange={e => uploadFiles([...e.target.files], o => setNf(s => ({ ...s, images: [...s.images, ...o] })))} />
@@ -434,11 +442,29 @@ function Seller({ seller, setSeller, products, setProducts, orders, setOrders })
         {k > 0 ? <button className="absolute bottom-0 w-full bg-emerald text-[9px] text-white" onClick={() => upd(p.id, x => ({ ...x, images: [x.images[k], ...x.images.filter((_, j) => j !== k)] }))}>Cover</button> : <span className="absolute bottom-0 w-full bg-cyan text-center text-[9px] text-black">Cover</span>}</div>)}</div>
       <div className="mt-3 flex flex-wrap items-center gap-2"><input type="file" accept="image/*" multiple disabled={uploading} className="text-xs" onChange={e => uploadFiles([...e.target.files], o => upd(p.id, x => ({ ...x, images: [...(x.images || []), ...o] })))} />
         <input className="inp !w-56" placeholder="Paste image URL" value={url[p.id] || ""} onChange={e => setUrl({ ...url, [p.id]: e.target.value })} />
-        <button className="btn2" onClick={() => { if (url[p.id]) { upd(p.id, x => ({ ...x, images: [...(x.images || []), url[p.id]] })); setUrl({ ...url, [p.id]: "" }); } }}>Add URL</button></div></div>)}</div>
+        <button className="btn2" onClick={() => { if (url[p.id]) { upd(p.id, x => ({ ...x, images: [...(x.images || []), url[p.id]] })); setUrl({ ...url, [p.id]: "" }); } }}>Add URL</button></div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input className="inp !w-72 text-xs" placeholder="Meesho / Supplier Product URL" value={sup[p.id] ?? (p.supplierUrl || "")} onChange={e => setSup({ ...sup, [p.id]: e.target.value })} />
+        <button className="btn2 !py-1.5 text-xs" onClick={() => upd(p.id, x => ({ ...x, supplierUrl: (sup[p.id] ?? (x.supplierUrl || "")).trim() }))}>Save Link</button>
+        {p.supplierUrl && <a href={p.supplierUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-cyan hover:underline"><ExternalLink size={12} /> Open Supplier</a>}
+      </div></div>)}</div>
       <button className="btn2 mt-4" onClick={resetCatalog}>Reset Default Catalog</button></section>
     <section><h3 className="mb-3 font-bold">Orders ({orders.length})</h3>{!orders.length && <p className="opacity-60">No orders yet.</p>}{orders.map(o => <div key={o.id} className="mb-2 rounded-xl border border-line bg-card p-3 text-sm">
       <div className="flex flex-wrap justify-between gap-2"><b>{o.id} • {inr(o.total)} • {o.buyer.pay}{o.buyer.utr && ` (UTR: ${o.buyer.utr})`}</b>
         <select className="inp !w-auto" value={o.status} onChange={e => updateOrderStatus(o.id, e.target.value)}>{STATUS.map(s => <option key={s}>{s}</option>)}</select></div>
       <div className="opacity-70">{o.items.map(i => `${i.qty}× ${i.name}`).join(", ")}</div>
-      <div className="opacity-70">{o.buyer.name} • {o.buyer.mobile}{o.buyer.insta && ` • ${o.buyer.insta}`} • {o.buyer.address}, {o.buyer.city} - {o.buyer.pincode}</div></div>)}</section></div>);
+      <div className="opacity-70">{o.buyer.name} • {o.buyer.mobile}{o.buyer.insta && ` • ${o.buyer.insta}`} • {o.buyer.address}, {o.buyer.city} - {o.buyer.pincode}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className="btn2 inline-flex items-center gap-1 !px-2.5 !py-1 text-xs" onClick={() => copyBuyerAddress(o)}>
+          {copiedId === o.id ? <><Check size={12} className="text-emerald" /> Copied Address</> : <><Copy size={12} /> Copy Meesho Address</>}
+        </button>
+        {o.items.map(it => {
+          const prod = products.find(p => p.id === it.id);
+          return prod?.supplierUrl ? (
+            <a key={it.id} href={prod.supplierUrl} target="_blank" rel="noreferrer" className="btn inline-flex items-center gap-1 !px-2.5 !py-1 text-xs">
+              Order {it.name.split(" ").slice(-2).join(" ")} <ExternalLink size={12} />
+            </a>
+          ) : null;
+        })}
+      </div></div>)}</section></div>);
 }
