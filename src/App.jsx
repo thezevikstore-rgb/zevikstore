@@ -202,7 +202,7 @@ function Home({ products, cat, setCat, go, addBag }) {
     <section className="py-8 text-center"><h1 className="text-3xl font-extrabold sm:text-5xl">Engineered for your <span className="text-cyan">everyday desk</span></h1>
       <p className="mx-auto mt-3 max-w-xl opacity-70">Minimalist desk gear & mobile accessories, made for Indian setups.</p></section>
     <div className="mb-6 grid grid-cols-2 gap-2 text-center text-xs font-semibold sm:grid-cols-4">
-      {["4.9★ Rated by 500+ Indian Setups", "24-Hr Dispatch", "7-Day Easy Replacement", "100% Quality Checked"].map(t => <div key={t} className="rounded-lg border border-line bg-card p-3">{t}</div>)}</div>
+      {["Direct-to-Desk Pricing", "24-Hr Dispatch", "7-Day Easy Replacement", "100% Quality Checked"].map(t => <div key={t} className="rounded-lg border border-line bg-card p-3">{t}</div>)}</div>
     <div className="mb-5 flex gap-2 overflow-x-auto">{CATS.map(c => <button key={c} onClick={() => setCat(c)} className={`whitespace-nowrap rounded-full border px-4 py-1.5 text-sm ${cat === c ? "border-emerald bg-emerald text-white" : "border-line"}`}>{c}</button>)}</div>
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3">{list.map(p => (
       <div key={p.id} className="overflow-hidden rounded-xl border border-line bg-card">
